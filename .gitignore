@@ -1,0 +1,4 @@
+*.user
+/ConsoleAppXb3/obj/
+/ConsoleAppXb3/bin/
+.vs/
