@@ -168,6 +168,17 @@ namespace ConsoleAppXb3
             Packet.API_TX tx = new Packet.API_TX((byte)Packet.API_CMD.API_IN_SOCKET_STATUS, new byte[] { socket, 0x0C });
             _serialPort.Write(tx.API(), 0, tx.API().Length);
             Console.WriteLine("{0} sock[{1}] was closed", DateTime.UtcNow.ToString("HH:mm:ss.fff"), socket);
+            try
+            {
+                sockets[socket].socket.Shutdown(SocketShutdown.Both);
+                sockets[socket].socket.Close();
+                sockets[socket].sockState = sock.state.closed;
+                sockets[socket].socket = null;
+            }
+            catch
+            {
+                sockets[socket].socket = null;
+            }
         }
         private static void socketReceive(byte socket, byte[] buff, int len)
         {
@@ -182,7 +193,7 @@ namespace ConsoleAppXb3
         }
         private static void socketSend(byte[] pkt)
         {
-            string frameId = Encoding.ASCII.GetString(pkt, 0, 1);
+            string frameId = ASCIIEncoding.Default.GetString(pkt, 0, 1);
             byte SocketID = pkt[1];
             byte txopt = pkt[2];
             string response = frameId;
@@ -195,18 +206,18 @@ namespace ConsoleAppXb3
                 int sent = s.socket.Send(payload, payload.Length, SocketFlags.None);
                 if (sent == payload.Length)
                 {
-                    response += Encoding.ASCII.GetString(new byte[1] { 0 });
+                    response += ASCIIEncoding.Default.GetString(new byte[1] { 0 });
                 }
                 else
                 {
                     Console.WriteLine("{0} sock[{1}] tx err", DateTime.UtcNow.ToString("HH:mm:ss.fff"), SocketID);
-                    response += Encoding.ASCII.GetString(new byte[1] { 0x21 });
+                    response += ASCIIEncoding.Default.GetString(new byte[1] { 0x21 });
                 }
             }
             catch
             {
                 // byte[] val = new byte[2] { /* Frame ID */pkt[0], 0x21 };
-                response += Encoding.ASCII.GetString(new byte[1] { 0x21 });
+                response += ASCIIEncoding.Default.GetString(new byte[1] { 0x21 });
             }
             Packet.API_TX tx = new Packet.API_TX((byte)Packet.API_CMD.API_IN_TX_STATUS,
                 ASCIIEncoding.Default.GetBytes(response));
@@ -215,7 +226,7 @@ namespace ConsoleAppXb3
         }
         private static void closeSocket(byte[] pkt)
         {
-            string frameId = Encoding.ASCII.GetString(pkt, 0, 1);
+            string frameId = ASCIIEncoding.Default.GetString(pkt, 0, 1);
             byte SocketID = pkt[1];
             string response = frameId;
             sock s = sockets[SocketID];
@@ -224,13 +235,13 @@ namespace ConsoleAppXb3
                 s.socket.Shutdown(SocketShutdown.Both);
                 s.socket.Close();
                 byte[] val = new byte[2] { SocketID, 0 };
-                response += Encoding.ASCII.GetString(val);
+                response += ASCIIEncoding.Default.GetString(val);
                 s.sockState = sock.state.closed ;
             }
             catch
             {
                 byte[] val = new byte[2] { SocketID, 0x20 };
-                response += Encoding.ASCII.GetString(val);
+                response += ASCIIEncoding.Default.GetString(val);
             }
             s.allocated = false;
             Packet.API_TX tx = new Packet.API_TX((byte)Packet.API_CMD.API_IN_SOCKET_CLOSE_RESP,
@@ -247,11 +258,11 @@ namespace ConsoleAppXb3
              Byte Address type 0 = IPV4 1 = string
              Byte[] Dest address
              */
-            string frameId = Encoding.ASCII.GetString(pkt, 0, 1);
+            string frameId = ASCIIEncoding.Default.GetString(pkt, 0, 1);
             byte SocketID = pkt[1];
             ushort destPort = (ushort)((pkt[2] << 8) + pkt[3]);
             byte addrType = pkt[4];
-            string destAddr = Encoding.ASCII.GetString(pkt, 5, pkt.Length - 5);
+            string destAddr = ASCIIEncoding.Default.GetString(pkt, 5, pkt.Length - 5);
             string response = frameId;
             sock s = sockets[SocketID];
             try
@@ -259,18 +270,18 @@ namespace ConsoleAppXb3
                 s.socket.Connect(destAddr, destPort);
                 s.socket.ReceiveTimeout = 1;
                 byte[] val = new byte[2] { SocketID, 0 };
-                response += Encoding.ASCII.GetString(val);
+                response += ASCIIEncoding.Default.GetString(val);
                 s.sockState = sock.state.connected;
             }
             catch (SocketException sockEx)
             {
                 byte[] val = new byte[2] { SocketID, 1 };
-                response += Encoding.ASCII.GetString(val);
+                response += ASCIIEncoding.Default.GetString(val);
             }
             catch
             {
                 byte[] val = new byte[2] { SocketID, 5 };
-                response += Encoding.ASCII.GetString(val);
+                response += ASCIIEncoding.Default.GetString(val);
             }
             Packet.API_TX tx = new Packet.API_TX((byte)Packet.API_CMD.API_IN_SOCKET_CONNECT_RESP,
                 ASCIIEncoding.Default.GetBytes(response));
@@ -289,7 +300,7 @@ namespace ConsoleAppXb3
              FrameID Byte
              Protocol Byte 0 = UDP, 1 = TCP, 4 = SSL
              */
-            string frameId = Encoding.ASCII.GetString(pkt, 0, 1);
+            string frameId = ASCIIEncoding.Default.GetString(pkt, 0, 1);
             string response = frameId;
             sock selected = null;
             int i;
@@ -310,7 +321,7 @@ namespace ConsoleAppXb3
             else
             {
                 byte[] val = new byte[2] { (byte)i, 0 };
-                response += Encoding.ASCII.GetString(val);
+                response += ASCIIEncoding.Default.GetString(val);
                 selected.socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
             }
             Packet.API_TX tx = new Packet.API_TX((byte)Packet.API_CMD.API_IN_SOCKET_CREATE_RESP,
@@ -323,6 +334,15 @@ namespace ConsoleAppXb3
             for (int i = 0; i < sockets.Length; i++)
             {
                 sockets[i].allocated = false;
+                if (sockets[i].socket != null)
+                {
+                    try
+                    {
+                        sockets[i].socket.Shutdown(SocketShutdown.Both);
+                        sockets[i].socket.Close();
+                    }
+                    catch { }
+                }
                 sockets[i].socket = null;
             }
             Thread.Sleep(1500);
@@ -339,8 +359,8 @@ namespace ConsoleAppXb3
         {
             string cmd = "";
             string response = "";
-            string frameId = Encoding.ASCII.GetString(pkt, 0, 1);
-            cmd += Encoding.ASCII.GetString(pkt, 1, 2);
+            string frameId = ASCIIEncoding.Default.GetString(pkt, 0, 1);
+            cmd += ASCIIEncoding.Default.GetString(pkt, 1, 2);
             Console.WriteLine("{0} RX AT {1}", DateTime.UtcNow.ToString("HH:mm:ss.fff"), cmd);
             switch (cmd)
             {
